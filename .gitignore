@@ -23,3 +23,6 @@ pyproject.toml
 uv.lock
 # git worktree 참조 폴더
 _ref/
+
+# 작업 기록 (로컬 전용)
+작업기록.md
