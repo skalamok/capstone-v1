@@ -32,7 +32,7 @@ DATA_DIR = Path(__file__).parent / "data"
 class SystemStatus(BaseModel):
     """모니터링 시스템 상태 조회 결과"""
     system_name: str = Field(description="시스템 이름")
-    status: str = Field(description="상태: healthy / degraded / down")
+    status: str = Field(description="상태: healthy / degraded / down / unknown")
     cpu_percent: float = Field(description="CPU 사용률 (%)")
     memory_percent: float = Field(description="메모리 사용률 (%)")
     last_checked: str = Field(description="마지막 체크 시각 (ISO 8601)")
@@ -89,7 +89,20 @@ def get_monitoring_status(system_name: str) -> SystemStatus:
     """
     # 본 Hands-on에서는 mock 데이터를 사용.
     # 실제 production에서는 Prometheus, Datadog 등 모니터링 시스템 호출
-    monitoring_data = json.loads((DATA_DIR / "monitoring.json").read_text())
+    monitoring_path = DATA_DIR / "monitoring.json"
+
+    # mock 데이터 파일이 없으면 예외 대신 unknown으로 응답
+    if not monitoring_path.exists():
+        return SystemStatus(
+            system_name=system_name,
+            status="unknown",
+            cpu_percent=0.0,
+            memory_percent=0.0,
+            last_checked=datetime.now().isoformat(),
+            alerts=["monitoring.json not found"],
+        )
+
+    monitoring_data = json.loads(monitoring_path.read_text(encoding="utf-8"))
 
     if system_name not in monitoring_data:
         return SystemStatus(
@@ -359,7 +372,7 @@ def get_incident_runbook(incident_type: str) -> str:
     if not runbook_path.exists():
         return f"# Runbook Not Found\n\nNo runbook for incident type: {incident_type}"
 
-    return runbook_path.read_text()
+    return runbook_path.read_text(encoding="utf-8")
 
 
 # ===========================================================================
@@ -397,9 +410,9 @@ def incident_analysis_prompt(
 1. **현재 상태 확인**: get_monitoring_status Tool로 {system_name}의 현재 상태를 조회하세요.
 2. **Runbook 참조**: 증상에 해당하는 runbook이 있는지 확인하세요.
    (예: 'api-latency', 'db-down', 'auth-failure')
-3. **관련 ticket 확인**: 같은 시스템에 대한 최근 Jira ticket이 있는지 검색하세요.
+3. **관련 ticket 확인**: search_jira_tickets로 같은 시스템에 대한 최근 Jira ticket이 있는지 검색하세요.
 4. **종합 분석**: 위 3가지 정보를 종합해 가능한 원인과 권장 조치를 제시하세요.
-5. **Ticket 생성 제안**: 사용자에게 새 incident ticket 생성 여부를 확인 후 진행하세요.
+5. **Ticket 생성 제안**: 사용자에게 새 incident ticket 생성 여부를 확인 후 create_jira_ticket을 호출하세요.
 
 각 단계에서 얻은 정보를 사용자에게 명시적으로 보고하면서 진행하세요.
 """.strip()
