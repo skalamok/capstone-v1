@@ -26,3 +26,7 @@ _ref/
 
 # 작업 기록 (로컬 전용)
 작업기록.md
+
+# Next.js(create-next-app, next dev)가 만드는 에이전트 안내 파일 — 커밋 제외 (사용자 결정)
+frontend/AGENTS.md
+frontend/CLAUDE.md

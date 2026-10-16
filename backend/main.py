@@ -28,6 +28,7 @@ if not load_dotenv(ENV_PATH):
 from agent.graph import build_agent
 from schemas.chat import ChatRequest, ChatResponse
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from streaming.sse_formatter import format_sse
 from streaming.event_converter import convert_langgraph_events
 
@@ -45,6 +46,15 @@ app = FastAPI(
     title="ICT Operations Support Backend",
     description="Capstone Day 1 — RAG + Agent + MCP integrated backend",
     lifespan=lifespan,
+)
+
+# CORS 설정 (Frontend localhost:3000 → Backend localhost:8000)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
