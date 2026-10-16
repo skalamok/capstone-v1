@@ -1,17 +1,21 @@
 /**
  * 단일 chat 메시지 렌더링.
  *
- * Token stream과 tool call을 함께 표시.
+ * Single agent: token stream + tool call
+ * Multi-agent: Plan 카드 + Task 목록 + 최종 응답
  */
 
-import type { UIMessage } from '@/lib/types';
+import type { UISupervisorMessage } from '@/lib/types';
+import { PlanView } from './PlanView';
+import { TaskListView } from './TaskListView';
 import { ToolCallView } from './ToolCallView';
 
 interface Props {
-  message: UIMessage;
+  message: UISupervisorMessage;
+  activeTaskId?: string;
 }
 
-export function ChatMessage({ message }: Props) {
+export function ChatMessage({ message, activeTaskId }: Props) {
   const isUser = message.role === 'user';
 
   return (
@@ -25,14 +29,28 @@ export function ChatMessage({ message }: Props) {
           ? 'bg-gray-200 text-black'
           : 'bg-white border border-gray-300'
       }`}>
-        {/* Tool call들이 먼저 (token이 그 뒤에 누적) */}
+        {/* [수정] Single 모드 tool call 박스 (가이드: a21에서 빠짐 → Single 모드에서 도구 박스가 사라짐) */}
         {message.toolCalls.map((tc, i) => (
           <ToolCallView key={i} toolCall={tc} />
         ))}
 
-        {/* Token 누적 텍스트 */}
+        {/* Plan 카드 (multi-agent 전용) */}
+        {message.plan && <PlanView plan={message.plan} />}
+
+        {/* Task list (multi-agent 전용) */}
+        {message.tasks.length > 0 && (
+          <TaskListView
+            tasks={message.tasks}
+            taskTokens={message.taskTokens}
+            activeTaskId={activeTaskId}
+          />
+        )}
+
+        {/* 최종 응답 token */}
         {message.content && (
-          <div className="whitespace-pre-wrap">{message.content}</div>
+          <div className="mt-3 whitespace-pre-wrap border-t pt-3">
+            {message.content}
+          </div>
         )}
       </div>
     </div>

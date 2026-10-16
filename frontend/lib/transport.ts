@@ -11,6 +11,7 @@ import type { StreamEvent } from './types';
  * SSE event를 파싱하여 onEvent callback 호출.
  *
  * @param backendUrl Backend URL (e.g., http://localhost:8000)
+ * @param endpoint 호출할 endpoint (e.g., /chat/stream, /chat/supervisor/stream)
  * @param message 사용자 메시지
  * @param threadId Thread ID (Frontend가 생성·전송)
  * @param onEvent 각 event마다 호출되는 callback
@@ -18,12 +19,13 @@ import type { StreamEvent } from './types';
  */
 export async function sendChatMessage(
   backendUrl: string,
+  endpoint: string,
   message: string,
   threadId: string,
   onEvent: (event: StreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(`${backendUrl}/chat/stream`, {
+  const response = await fetch(`${backendUrl}${endpoint}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
