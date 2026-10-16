@@ -30,7 +30,8 @@ from schemas.chat import ChatRequest, ChatResponse
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from streaming.sse_formatter import format_sse
-from streaming.event_converter import convert_langgraph_events
+from streaming.event_converter import convert_langgraph_events, convert_supervisor_events
+from agent.supervisor_graph import build_supervisor_graph
 
 
 # Agent를 lifespan으로 1회 생성 (서버 시작 시)
@@ -38,6 +39,7 @@ from streaming.event_converter import convert_langgraph_events
 async def lifespan(app: FastAPI):
     # Startup: agent 생성
     app.state.agent = await build_agent()
+    app.state.supervisor_graph = await build_supervisor_graph()  # Multi-agent (Supervisor)
     yield
     # Shutdown: 별도 정리 필요시 여기에
 
@@ -142,5 +144,39 @@ async def chat_stream(request: ChatRequest):
             "X-Accel-Buffering": "no",
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
+        },
+    )
+
+
+@app.post("/chat/supervisor/stream")
+async def chat_supervisor_stream(request: ChatRequest):
+    """
+    Multi-agent (Supervisor pattern) streaming endpoint.
+
+    Day 2 Multi-agent UX hands-on용.
+    """
+    thread_id = request.thread_id or str(uuid.uuid4())
+
+    async def event_generator():
+        config = {"configurable": {"thread_id": thread_id}}
+
+        # [수정] subgraphs=True 추가: sub-agent는 execute 노드 안에서 따로 실행되는 subgraph라서,
+        # 이 옵션이 없으면 sub-agent의 LLM token이 stream에 나오지 않음 (가이드: 옵션 없음)
+        supervisor_stream = app.state.supervisor_graph.astream(
+            {"messages": [{"role": "user", "content": request.message}]},
+            config=config,
+            stream_mode=["messages", "updates"],
+            subgraphs=True,
+        )
+
+        async for event in convert_supervisor_events(supervisor_stream, thread_id):
+            yield format_sse(event)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
         },
     )

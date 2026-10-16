@@ -15,6 +15,11 @@ from schemas.stream import (
     ToolCallStartEvent,
     ToolCallEndEvent,
     DoneEvent,
+    PlanCreatedEvent,
+    TaskListCreatedEvent,
+    TaskStartedEvent,
+    TaskCompletedEvent,
+    SubAgentTokenEvent,
 )
 
 
@@ -63,4 +68,78 @@ async def convert_langgraph_events(
                             )
 
     # 모든 event 처리 완료 후 done event
+    yield DoneEvent(thread_id=thread_id)
+
+
+async def convert_supervisor_events(
+    supervisor_stream,
+    thread_id: str,
+):
+    """
+    Supervisor graph의 stream event를 본 capstone SSE event로 변환.
+
+    Multi-agent 시나리오의 event들을 frontend가 가시화할 수 있는 형태로 송출.
+    """
+    current_task_id = None  # 현재 활성 task
+    previous_tasks = None   # 이전 state의 tasks (변화 감지용)
+
+    # [수정] subgraphs=True로 받으므로 (namespace, mode, data) 3개로 풀어 씀.
+    # namespace == () 는 Supervisor graph 자체, 그 외는 sub-agent(subgraph) 내부
+    async for namespace, mode, data in supervisor_stream:
+        is_subgraph = len(namespace) > 0
+
+        # [수정] Task 상태 변화는 Supervisor graph의 updates만 봄 (sub-agent 내부 updates는 무시)
+        if mode == "updates" and not is_subgraph:
+            # 어느 node가 업데이트되었는지 확인
+            for node_name, node_update in data.items():
+
+                if node_name == "planning":
+                    # Planning 완료 → plan_created + task_list_created
+                    if "plan" in node_update:
+                        yield PlanCreatedEvent(plan=node_update["plan"])
+                    if "tasks" in node_update:
+                        yield TaskListCreatedEvent(tasks=node_update["tasks"])
+                        previous_tasks = node_update["tasks"]
+
+                # [수정] start_task 노드(in_progress 변경)도 같은 방식으로 상태 변화 감지 (가이드: execute만)
+                elif node_name in ("start_task", "execute"):
+                    # Task 실행 → 상태 변화 감지하여 event 발행
+                    if "tasks" in node_update:
+                        new_tasks = node_update["tasks"]
+                        # 이전과 비교해 상태 변화 감지
+                        for new_t, old_t in zip(new_tasks, previous_tasks or []):
+                            if new_t["status"] == "in_progress" and old_t["status"] == "pending":
+                                yield TaskStartedEvent(
+                                    task_id=new_t["id"],
+                                    agent_name=new_t["agent"],
+                                )
+                                current_task_id = new_t["id"]
+                            elif new_t["status"] == "completed" and old_t["status"] != "completed":
+                                yield TaskCompletedEvent(
+                                    task_id=new_t["id"],
+                                    result_preview=(new_t["result"] or "")[:200],
+                                )
+                        previous_tasks = new_tasks
+
+                elif node_name == "finalize":
+                    # 최종 응답 → 기존 token event로 흘려보냄 (단순화)
+                    if "messages" in node_update:
+                        last_msg = node_update["messages"][-1]
+                        if hasattr(last_msg, "content"):
+                            # 전체 응답을 한 번에 보냄 (단순화)
+                            yield TokenEvent(content=last_msg.content)
+
+        # [수정] sub-agent 내부의 LLM token chunk만 사용 (가이드: 모든 messages)
+        # - Supervisor 자체의 planning token, finalize 최종 메시지는 제외 (finalize가 sub_agent_token으로 잘못 붙던 문제)
+        # - sub-agent의 ToolMessage(도구 결과 원문)는 제외하고 AIMessageChunk만
+        elif mode == "messages" and is_subgraph:
+            # Sub-agent의 LLM token chunk
+            message_chunk, metadata = data
+            if isinstance(message_chunk, AIMessageChunk) and message_chunk.content:
+                if current_task_id:
+                    yield SubAgentTokenEvent(
+                        task_id=current_task_id,
+                        content=message_chunk.content,
+                    )
+
     yield DoneEvent(thread_id=thread_id)
