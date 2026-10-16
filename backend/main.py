@@ -27,6 +27,9 @@ if not load_dotenv(ENV_PATH):
 
 from agent.graph import build_agent
 from schemas.chat import ChatRequest, ChatResponse
+from fastapi.responses import StreamingResponse
+from streaming.sse_formatter import format_sse
+from streaming.event_converter import convert_langgraph_events
 
 
 # Agent를 lifespan으로 1회 생성 (서버 시작 시)
@@ -87,4 +90,47 @@ async def chat(request: ChatRequest) -> ChatResponse:
         thread_id=thread_id,
         message=final_message.content,
         tool_calls=tool_calls,
+    )
+
+
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """
+    Streaming chat endpoint.
+
+    추가:
+    - SSE (Server-Sent Events) format으로 stream
+    - 4가지 event type: token, tool_call_start, tool_call_end, done
+    - Multi-event streaming
+    """
+    # thread_id 처리 (Day 1과 동일 로직)
+    thread_id = request.thread_id or str(uuid.uuid4())
+
+    async def event_generator():
+        """
+        SSE event를 생성하는 async generator.
+        FastAPI StreamingResponse가 이를 chunk 단위로 client에 전송.
+        """
+        config = {"configurable": {"thread_id": thread_id}}
+
+        # LangGraph astream 호출
+        langgraph_stream = app.state.agent.astream(
+            {"messages": [{"role": "user", "content": request.message}]},
+            config=config,
+            stream_mode=["messages", "updates"],
+        )
+
+        # LangGraph event → 본 capstone event → SSE format
+        async for event in convert_langgraph_events(langgraph_stream, thread_id):
+            yield format_sse(event)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            # Proxy/Load Balancer buffering 방지
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
     )
