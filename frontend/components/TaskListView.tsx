@@ -38,12 +38,14 @@ function TaskCard({ task, currentToken, isActive }: TaskCardProps) {
     pending: '⏸',
     in_progress: '🔄',
     completed: '✅',
+    failed: '❌',
   }[task.status];
 
   const statusColor = {
     pending: 'bg-gray-50 border-gray-200',
     in_progress: 'bg-yellow-50 border-yellow-300',
     completed: 'bg-green-50 border-green-200',
+    failed: 'bg-red-50 border-red-200',
   }[task.status];
 
   return (
@@ -73,6 +75,13 @@ function TaskCard({ task, currentToken, isActive }: TaskCardProps) {
                 {task.result}
               </div>
             </details>
+          )}
+
+          {/* failed 상태에서 error_message 표시 */}
+          {task.status === 'failed' && task.error_message && (
+            <div className="mt-2 text-xs text-red-700">
+              {task.error_message}
+            </div>
           )}
         </div>
       </div>

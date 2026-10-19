@@ -124,14 +124,28 @@ export default function ChatPage() {
                 };
                 break;
 
+              // status 받아오고, error_message 반영되도록 수정
               case 'task_completed':
                 updated[lastIdx] = {
                   ...lastMsg,
                   tasks: lastMsg.tasks.map(t =>
                     t.id === event.task_id
-                      ? { ...t, status: 'completed' as const, result: event.result_preview }
+                      ? {
+                          ...t,
+                          status: event.status,
+                          result: event.result_preview,
+                          error_message: event.error_message,
+                        }
                       : t
                   ),
+                };
+                break;
+
+              // [수정] ErrorEvent를 메시지에 저장해 ErrorBanner로 표시 (가이드: 처리 없음)
+              case 'error':
+                updated[lastIdx] = {
+                  ...lastMsg,
+                  error: { message: event.message, recoverable: event.recoverable },
                 };
                 break;
 

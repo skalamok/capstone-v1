@@ -9,6 +9,7 @@ import type { UISupervisorMessage } from '@/lib/types';
 import { PlanView } from './PlanView';
 import { TaskListView } from './TaskListView';
 import { ToolCallView } from './ToolCallView';
+import { ErrorBanner } from './ErrorBanner';
 
 interface Props {
   message: UISupervisorMessage;
@@ -44,6 +45,12 @@ export function ChatMessage({ message, activeTaskId }: Props) {
             taskTokens={message.taskTokens}
             activeTaskId={activeTaskId}
           />
+        )}
+
+        {/* [수정] stream 중 오류 배너 (가이드: ErrorBanner를 쓰는 곳이 없음).
+            recoverable이면 위의 Plan·Task·부분 응답을 그대로 둔 채 배너만 추가 */}
+        {message.error && (
+          <ErrorBanner message={message.error.message} recoverable={message.error.recoverable} />
         )}
 
         {/* 최종 응답 token */}

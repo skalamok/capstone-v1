@@ -41,8 +41,9 @@ export interface Task {
   id: string;
   description: string;
   agent: string;
-  status: 'pending' | 'in_progress' | 'completed';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
   result?: string;
+  error_message?: string;
 }
 
 export interface TaskListCreatedEvent {
@@ -56,16 +57,29 @@ export interface TaskStartedEvent {
   agent_name: string;
 }
 
+// TaskCompletedEvent에 status, error_message 추가
 export interface TaskCompletedEvent {
   type: 'task_completed';
   task_id: string;
+  status: 'completed' | 'failed';
   result_preview?: string;
+  error_message?: string;
 }
 
 export interface SubAgentTokenEvent {
   type: 'sub_agent_token';
   task_id: string;
   content: string;
+}
+
+/**
+ * UI에서 사용할 Error 메시지 type.
+ */
+export interface ErrorEvent {
+  type: 'error';
+  code: string;
+  message: string;
+  recoverable: boolean;
 }
 
 // 기존 StreamEvent type을 확장
@@ -78,7 +92,8 @@ export type StreamEvent =
   | TaskListCreatedEvent
   | TaskStartedEvent
   | TaskCompletedEvent
-  | SubAgentTokenEvent;
+  | SubAgentTokenEvent
+  | ErrorEvent;
 
 /**
  * UI에서 사용할 메시지 type.
@@ -114,4 +129,7 @@ export interface UISupervisorMessage {
   plan?: string;
   tasks: Task[];
   taskTokens: Record<string, string>;  // task_id → 누적 token
+
+  // [수정] stream 중 받은 ErrorEvent (가이드: ErrorBanner는 만들지만 error 이벤트를 받아 보여 주는 곳이 없음)
+  error?: { message: string; recoverable: boolean };
 }
